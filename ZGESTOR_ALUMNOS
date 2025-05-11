@@ -1,0 +1,265 @@
+*&---------------------------------------------------------------------*
+*& Report ZGESTOR_ALUMNOS_06
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+REPORT zgestor_alumnos_06.
+DATA: lt_alumnos   TYPE TABLE OF zalumnos_curso_6,
+      ls_alumnos   TYPE zalumnos_curso_6,
+      lt_values    TYPE vrm_values,
+      ls_value     TYPE vrm_value,
+      lv_respuesta TYPE c,
+      gv_result    TYPE zalumnos_curso_6,
+      lt_fieldcat  TYPE slis_t_fieldcat_alv.
+
+SELECTION-SCREEN BEGIN OF BLOCK part1 WITH FRAME TITLE TEXT-001.
+PARAMETERS: r_listar RADIOBUTTON GROUP rad5 USER-COMMAND act DEFAULT 'X',
+            r_intro  RADIOBUTTON GROUP rad5,
+            r_borrar RADIOBUTTON GROUP rad5.
+SELECTION-SCREEN END OF BLOCK part1.
+
+SELECTION-SCREEN BEGIN OF BLOCK part2 WITH FRAME TITLE TEXT-000.
+
+
+SELECT-OPTIONS: so_dni   FOR ls_alumnos-dni MODIF ID a,
+            so_nomb  FOR ls_alumnos-nombre MODIF ID a,
+            so_ape1  FOR ls_alumnos-apellido1 MODIF ID a,
+            so_ape2  FOR ls_alumnos-apellido2 MODIF ID a,
+            so_direc FOR ls_alumnos-direccion MODIF ID a,
+            so_fecha FOR ls_alumnos-fecha MODIF ID a,
+            so_email FOR ls_alumnos-email MODIF ID a.
+
+PARAMETERS: pa_dni   TYPE z_dnia06 VISIBLE LENGTH 15 MODIF ID c,
+            pa_dnib  TYPE Z_PDNI_06 AS LISTBOX VISIBLE LENGTH 20  MODIF ID d,
+            pa_nomb  TYPE z_nombrea06  VISIBLE LENGTH 15 MODIF ID b,
+            pa_ape1  TYPE z_apellidos06 VISIBLE LENGTH 15 MODIF ID b,
+            pa_ape2  TYPE z_apellidos06 VISIBLE LENGTH 15 MODIF ID b,
+            pa_direc TYPE z_direcciona06 VISIBLE LENGTH 15 MODIF ID b,
+            pa_fecha TYPE z_fn06     VISIBLE LENGTH 15 MODIF ID b,
+            pa_email TYPE z_email6   VISIBLE LENGTH 15 MODIF ID b.
+SELECTION-SCREEN END OF BLOCK part2.
+
+
+SELECTION-SCREEN:
+BEGIN OF BLOCK part4 WITH FRAME TITLE TEXT-002, "PUSH BOTON
+SKIP 1,
+PUSHBUTTON 10(25) TEXT-003 USER-COMMAND mostrar_alumno, "BOTON
+SKIP 2,
+PUSHBUTTON 10(25) TEXT-004 USER-COMMAND insertar_alumno, "BOTON
+SKIP 2,
+PUSHBUTTON 10(25) TEXT-007 USER-COMMAND insertar_curso, "BOTON
+SKIP 3,
+PUSHBUTTON 10(25) TEXT-005 USER-COMMAND borrar_alumno, "BOTON
+SKIP 4,
+PUSHBUTTON 10(25) TEXT-006 USER-COMMAND volver_menu, "BOTON
+END OF BLOCK part4.
+
+
+
+
+AT SELECTION-SCREEN OUTPUT.
+  LOOP AT SCREEN.
+    IF r_listar = 'X'.
+      IF screen-group1 = 'B'  OR screen-group1 = 'C' OR screen-group1 = 'D'.
+        screen-active = 0.
+      ENDIF.
+    ELSEIF r_intro = 'X'.
+      IF screen-group1 = 'A' OR screen-group1 = 'D'.
+        screen-active = 0.
+      ENDIF.
+    ELSEIF r_borrar = 'X'.
+      IF screen-group1 = 'A' OR screen-group1 = 'B' OR screen-group1 = 'C' .
+        screen-active = 0.
+      ENDIF.
+    ENDIF.
+    MODIFY SCREEN.
+  ENDLOOP.
+
+  CLEAR lt_alumnos.
+
+
+*OBTENEMOS LOS ALUMNOS DESDE LA TABLA
+  SELECT  * FROM zalumnos_curso_6 INTO TABLE lt_alumnos.
+  CALL FUNCTION 'VRM_SET_VALUES'
+    EXPORTING
+      id     = 'pa_dnib'
+      values = lt_values.
+
+
+
+*LLENAMOS EL LISTBOX CON LOS DATOS DEL DNI DEL ALUMNO
+
+  LOOP AT lt_alumnos INTO ls_alumnos.
+    ls_value-key = ls_alumnos-dni.
+    APPEND ls_value TO lt_values.
+  ENDLOOP.
+
+
+AT SELECTION-SCREEN.
+  CASE sy-ucomm.
+    WHEN 'MOSTRAR_ALUMNO'.
+      PERFORM listar_alumnos.
+      LEAVE TO LIST-PROCESSING.
+    WHEN 'INSERTAR_ALUMNO'.
+      PERFORM insertar_alumnos.
+      LEAVE TO LIST-PROCESSING.
+    WHEN 'INSERTAR_CURSO'.
+      SUBMIT zgestor_cursos_06
+      VIA SELECTION-SCREEN
+      AND RETURN.
+    WHEN 'BORRAR_ALUMNO'.
+      PERFORM borrar_alumno.
+      LEAVE TO LIST-PROCESSING.
+    WHEN 'VOLVER_MENU'.
+      SUBMIT zmonitor_06
+      VIA SELECTION-SCREEN
+      AND RETURN.
+  ENDCASE.
+
+START-OF-SELECTION.
+
+*  IF r_listar = 'X'.
+*    PERFORM listar_alumnos.
+*  ELSEIF r_intro = 'X'.
+*    PERFORM insertar_alumnos.
+*  ELSEIF r_borrar = 'X'.
+*    PERFORM borrar_alumno.
+*  ENDIF.
+
+FORM listar_alumnos.
+
+  SELECT *
+   FROM zalumnos_curso_6
+   INTO TABLE lt_alumnos
+     WHERE    dni IN so_dni
+      AND     nombre IN so_nomb
+      AND     apellido1 IN so_ape1
+      AND     apellido2 IN so_ape2
+      AND     direccion IN so_direc
+      AND     fecha IN so_fecha
+      AND     email IN so_email.
+  CALL FUNCTION 'REUSE_ALV_FIELDCATALOG_MERGE'
+    EXPORTING
+      i_program_name   = sy-repid
+      i_structure_name = 'zalumnos_curso_6'
+    CHANGING
+      ct_fieldcat      = lt_fieldcat.
+
+
+  IF sy-subrc <> 0.
+    WRITE: / 'Error en la creación del catalogo ALV'.
+    EXIT.
+  ENDIF.
+
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY'
+    EXPORTING
+      i_callback_program = sy-repid
+      it_fieldcat        = lt_fieldcat
+    TABLES
+      t_outtab           = lt_alumnos.
+  IF sy-subrc <> 0.
+    WRITE: / 'Error al mostrar ALV'.
+    EXIT.
+  ENDIF.
+
+  IF sy-subrc = 0.
+*    LOOP AT lt_alumnos INTO gv_result.
+*      WRITE: /.
+*      WRITE: /.
+*      WRITE: / 'DNI:', gv_result-dni,
+*             / 'Nombre:', gv_result-nombre,
+*             / 'Primer Apellido:', gv_result-apellido1,
+*             / 'Segundo Apellido:', gv_result-apellido2,
+*             / 'Dirección:', gv_result-direccion,
+*             / 'Fecha de Nacimietno:', gv_result-fecha,
+*             / 'Email:', gv_result-email.
+*      WRITE: /.
+*      WRITE: /.
+*
+*    ENDLOOP.
+  ELSE.
+    WRITE: / 'NO SE ENCONTRARON REGISTROS'.
+  ENDIF.
+ENDFORM.
+
+FORM insertar_alumnos.
+
+* COMPROBAMOS QUE TODOS LOS CAMPOS DEBEN ESTAR RELLENADOS
+  IF  pa_dni  IS INITIAL OR pa_dni IS INITIAL OR pa_nomb
+    IS INITIAL OR pa_ape1 IS INITIAL OR pa_ape2
+    IS INITIAL OR pa_direc IS INITIAL OR pa_fecha
+     IS INITIAL OR pa_email IS INITIAL.
+  MESSAGE 'Todos los campos deben ser rellenados' TYPE 'I'.
+  RETURN.
+  ENDIF.
+
+
+  CALL FUNCTION 'POPUP_TO_CONFIRM'
+    EXPORTING
+      titlebar              = ' Confirmación'
+      text_question         = '¿Desea insertar el alumno?'
+      text_button_1         = ' SI '
+      icon_button_1         = ' NO '
+      default_button        = '1'
+      display_cancel_button = 'X'
+    IMPORTING
+      answer                = lv_respuesta
+    EXCEPTIONS
+      text_not_found        = 1.
+
+
+*COMPROBAMOS QUE EL ALUMNO CON EL DNI NO ESTE REGISTRADO
+  SELECT SINGLE * FROM zalumnos_curso_6 INTO ls_alumnos WHERE dni = pa_dni.
+
+  IF sy-subrc = 0.
+    MESSAGE 'Ya hay un alumno registrado con este DNI' TYPE 'I'.
+    EXIT.
+  ENDIF.
+
+  IF lv_respuesta = '1'.
+    DATA(ls_nuevo_campo) = VALUE zalumnos_curso_6(
+        dni = pa_dni
+        nombre = pa_nomb
+        apellido1 = pa_ape1
+        apellido2 = pa_ape2
+        direccion = pa_direc
+        fecha = pa_fecha
+        email = pa_email
+    ).
+    MODIFY zalumnos_curso_6 FROM ls_nuevo_campo.
+
+    IF lv_respuesta = '1'.
+
+      MESSAGE 'Alumno registrado correctamente' TYPE 'I'.
+    ELSE.
+      MESSAGE 'Error al insertar el registro'TYPE 'I'.
+    ENDIF.
+  ELSE.
+    MESSAGE 'Operación cancelada por el usuario' TYPE 'I'.
+  ENDIF.
+  CLEAR ls_alumnos.
+ENDFORM.
+
+FORM borrar_alumno.
+  CALL FUNCTION 'POPUP_TO_CONFIRM'
+    EXPORTING
+      titlebar       = ' Confirmación '
+      text_question  = ' ¿Estás seguro que quieres borrar el alumno? '
+      text_button_1  = 'SI'
+      text_button_2  = 'NO'
+      default_button = '1'
+    IMPORTING
+      answer         = lv_respuesta.
+
+  IF  lv_respuesta = '1'.
+    DELETE FROM zalumnos_curso_6 WHERE dni = pa_dni.
+    IF sy-subrc = 0.
+      MESSAGE 'Alumno borrado correctamente' TYPE 'I'.
+      EXIT.
+    ELSE.
+      MESSAGE 'No se encontró en la base de datos el alumnos que deseas borrar' TYPE 'I'.
+    ENDIF.
+  ELSE.
+    MESSAGE  'Se ha cancelado el borrado por el usuario' TYPE 'I'.
+  ENDIF.
+ENDFORM.
